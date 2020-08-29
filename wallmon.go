@@ -21,7 +21,7 @@ const (
 type config struct {
 	dataDir         string
 	uri             string
-	chromePath      string
+	chromeCmd       string
 	restartInterval time.Duration
 	restartDelay    time.Duration
 }
@@ -43,7 +43,7 @@ func main() {
 	args := []string{"--kiosk", dirArg, cnf.uri}
 	for {
 		timeout, _ := context.WithTimeout(context.Background(), cnf.restartInterval)
-		if err := runContext(timeout, cnf.chromePath, args...); err != nil {
+		if err := runContext(timeout, cnf.chromeCmd, args...); err != nil {
 			fmt.Printf("failed to run command: %s\n", err)
 			os.Exit(1)
 		}
@@ -90,10 +90,13 @@ func parseAndValidateFlags() (config, error) {
 	flag.StringVar(&cnf.uri, "url", "", "the uri to visit")
 	flag.DurationVar(&cnf.restartInterval, "restart-interval", 12*time.Hour, fmt.Sprintf("restart interval of chrome (min %s)", minRestartInterval))
 	flag.DurationVar(&cnf.restartDelay, "restart-delay", 1*time.Second, fmt.Sprintf("delay between restarts of chrome (min %s)", minRestartDelay))
-	flag.StringVar(&cnf.chromePath, "chrome-path", defaultChromeCmdName(), "path to chrome cmd")
+	flag.StringVar(&cnf.chromeCmd, "chrome-cmd", defaultChromeCmdName(), "path to chrome cmd")
 	flag.Parse()
-	if cnf.chromePath == "" {
+	if cnf.chromeCmd == "" {
 		return config{}, fmt.Errorf("chrome path needs to be specified")
+	}
+	if _, err := exec.LookPath(cnf.chromeCmd); err != nil {
+		return config{}, fmt.Errorf("invalid chrome cmd: %w", err)
 	}
 	if cnf.dataDir == "" {
 		return config{}, fmt.Errorf("data-dir can not be empty")
@@ -102,7 +105,7 @@ func parseAndValidateFlags() (config, error) {
 		return config{}, fmt.Errorf("url must be defined")
 	}
 	if _, err := url.ParseRequestURI(cnf.uri); err != nil {
-		return config{}, fmt.Errorf("unable to validate url: %s", err)
+		return config{}, fmt.Errorf("unable to validate url: %w", err)
 	}
 	if cnf.restartInterval < minRestartInterval {
 		return config{}, fmt.Errorf("restart interval needs to be greater than: %s", minRestartInterval)
@@ -116,12 +119,20 @@ func parseAndValidateFlags() (config, error) {
 func defaultChromeCmdName() string {
 	switch runtime.GOOS {
 	case "darwin":
-		return "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+		return firstExistingCmd("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 	case "windows":
-		return ""
+		return firstExistingCmd("\\Program Files (x86)\\Google\\Chrome\\Application\\chrome")
 	case "linux":
-		return ""
-	default:
-		return ""
+		return firstExistingCmd("google-chrome", "chromium-browser")
 	}
+	return ""
+}
+
+func firstExistingCmd(cmds ...string) string {
+	for _, cmd := range cmds {
+		if _, err := exec.LookPath(cmd); err == nil {
+			return cmd
+		}
+	}
+	return ""
 }
