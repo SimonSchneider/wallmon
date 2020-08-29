@@ -86,7 +86,7 @@ func initializeDataDir(dataDir string) error {
 
 func parseAndValidateFlags() (config, error) {
 	var cnf config
-	flag.StringVar(&cnf.dataDir, "data-dir", "", "the data-directory to use for chrome")
+	flag.StringVar(&cnf.dataDir, "data-dir", path.Join(os.TempDir(), "wallmon-data-dir"), "the data-directory to use for chrome")
 	flag.StringVar(&cnf.uri, "url", "", "the uri to visit")
 	flag.DurationVar(&cnf.restartInterval, "restart-interval", 12*time.Hour, fmt.Sprintf("restart interval of chrome (min %s)", minRestartInterval))
 	flag.DurationVar(&cnf.restartDelay, "restart-delay", 1*time.Second, fmt.Sprintf("delay between restarts of chrome (min %s)", minRestartDelay))
