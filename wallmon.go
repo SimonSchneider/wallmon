@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,7 @@ type config struct {
 	dataDir         string
 	uri             string
 	chromeCmd       string
+	extraArgs       []string
 	restartInterval time.Duration
 	restartDelay    time.Duration
 	debug           bool
@@ -50,6 +52,7 @@ func main() {
 	}
 	dirArg := fmt.Sprintf("--user-data-dir=%s", cnf.dataDir)
 	args := []string{"--kiosk", dirArg, cnf.uri}
+	args = append(args, cnf.extraArgs...)
 	for {
 		timeout, _ := context.WithTimeout(context.Background(), cnf.restartInterval)
 		if err := runContext(timeout, cnf.debug, cnf.chromeCmd, args...); err != nil {
@@ -72,9 +75,12 @@ func runContext(ctx context.Context, debug bool, cmdName string, args ...string)
 	}
 	if err := cmd.Wait(); err != nil {
 		var exitErr *exec.ExitError
+		fmt.Printf("error done")
 		if !errors.As(err, &exitErr) && exitErr.ExitCode() != -1 {
 			return fmt.Errorf("command failed unexpectedly: %w", err)
 		}
+	} else {
+		return fmt.Errorf("exited by user")
 	}
 	return nil
 }
@@ -96,12 +102,14 @@ func initializeDataDir(dataDir string) error {
 
 func parseAndValidateFlags() (config, error) {
 	var cnf config
+	var extraArgs string
 	flag.StringVar(&cnf.dataDir, "data-dir", path.Join(os.TempDir(), "wallmon-data-dir"), "the data-directory to use for chrome")
 	flag.StringVar(&cnf.uri, "url", "", "the uri to visit")
 	flag.DurationVar(&cnf.restartInterval, "restart-interval", 12*time.Hour, fmt.Sprintf("restart interval of chrome (min %s)", minRestartInterval))
 	flag.DurationVar(&cnf.restartDelay, "restart-delay", 1*time.Second, fmt.Sprintf("delay between restarts of chrome (min %s)", minRestartDelay))
 	flag.StringVar(&cnf.chromeCmd, "chrome-cmd", defaultChromeCmdName(), "path to chrome cmd")
 	flag.BoolVar(&cnf.debug, "debug", false, "additional output (mainly redirecting chrome stdout to stdout)")
+	flag.StringVar(&extraArgs, "extra-args", "", "extra args for chrome in format \"display=1\"")
 	flag.Parse()
 	if cnf.chromeCmd == "" {
 		return config{}, fmt.Errorf("chrome path needs to be specified")
@@ -124,6 +132,7 @@ func parseAndValidateFlags() (config, error) {
 	if cnf.restartDelay < minRestartDelay {
 		return config{}, fmt.Errorf("restart delay needs to be greater than: %s", minRestartInterval)
 	}
+	cnf.extraArgs = strings.Split(extraArgs, " ")
 	return cnf, nil
 }
 
